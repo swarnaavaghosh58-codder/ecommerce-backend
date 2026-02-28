@@ -13,19 +13,23 @@ const app = express();
 ================================ */
 app.use(
   cors({
-    origin: "*",
+    origin: "*", // later change to frontend URL
+    credentials: true,
   })
 );
 
 app.use(express.json());
 
 /* ================================
-   DATABASE
+   DATABASE CONNECTION
 ================================ */
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("Mongo Error:", err));
+  .catch((err) => {
+    console.error("❌ MongoDB Error:", err);
+    process.exit(1);
+  });
 
 /* ================================
    ROUTES
@@ -46,11 +50,12 @@ app.get("/", (req, res) => {
 const server = http.createServer(app);
 
 /* ================================
-   SOCKET.IO
+   SOCKET.IO SETUP
 ================================ */
 const io = new Server(server, {
   cors: {
     origin: "*",
+    methods: ["GET", "POST"],
   },
 });
 
@@ -68,7 +73,6 @@ io.use((socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     socket.user = decoded;
-
     next();
   } catch (err) {
     next(new Error("Invalid token"));
@@ -79,18 +83,18 @@ io.use((socket, next) => {
    SOCKET CONNECTION
 ================================ */
 io.on("connection", (socket) => {
-  console.log("⚡ Connected:", socket.user.id);
+  console.log("⚡ User Connected:", socket.user?.id);
 
-  // Join private room
-  socket.join(socket.user.id);
+  if (socket.user?.id) {
+    socket.join(socket.user.id);
+  }
 
-  // Admin room
-  if (socket.user.role === "admin") {
+  if (socket.user?.role === "admin") {
     socket.join("admin-room");
   }
 
   socket.on("disconnect", () => {
-    console.log("❌ Disconnected:", socket.user.id);
+    console.log("❌ User Disconnected:", socket.user?.id);
   });
 });
 
@@ -102,6 +106,6 @@ app.set("io", io);
 ================================ */
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🔥 Server running on port ${PORT}`);
 });
